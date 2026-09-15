@@ -17,7 +17,6 @@ class CalendarManagementDialog extends StatefulWidget {
 class _CalendarManagementDialogState extends State<CalendarManagementDialog> {
   final CalendarService _calendarService = CalendarService();
   DateTime _selectedDate = DateTime.now();
-  DayCategory _currentCategory = DayCategory.workday;
   CalendarOverride? _currentOverride;
   List<CalendarOverride> _allOverrides = [];
 
@@ -29,13 +28,11 @@ class _CalendarManagementDialogState extends State<CalendarManagementDialog> {
 
   Future<void> _loadDateInfo() async {
     final override = await _calendarService.getDayOverride(_selectedDate);
-    final cat = await _calendarService.getDayCategory(_selectedDate);
     final overrides = await _calendarService.getAllOverrides();
 
     if (mounted) {
       setState(() {
         _currentOverride = override;
-        _currentCategory = cat;
         _allOverrides = overrides;
       });
     }

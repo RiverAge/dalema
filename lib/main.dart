@@ -5,21 +5,11 @@ import 'constants/app_theme.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'screens/history_screen.dart';
 import 'screens/settings_screen.dart';
-import 'screens/splash_screen.dart';
 import 'screens/today_screen.dart';
 import 'services/notification_service.dart';
 
-void main() async {
+void main() {
   WidgetsFlutterBinding.ensureInitialized();
-
-  final notificationService = NotificationService.instance;
-  await notificationService.init(
-    onDidReceiveNotificationResponse: (NotificationResponse response) {},
-  );
-
-  await notificationService.requestPermissions();
-  // Reschedule asynchronously without blocking app launch
-  notificationService.rescheduleAllNotifications();
 
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
@@ -30,6 +20,20 @@ void main() async {
   ));
 
   runApp(const DaleMaApp());
+
+  // Initialize notifications asynchronously without blocking first frame render
+  WidgetsBinding.instance.addPostFrameCallback((_) async {
+    try {
+      final notificationService = NotificationService.instance;
+      await notificationService.init(
+        onDidReceiveNotificationResponse: (NotificationResponse response) {},
+      );
+      await notificationService.requestPermissions();
+      notificationService.rescheduleAllNotifications();
+    } catch (e) {
+      debugPrint('Notification init error: $e');
+    }
+  });
 }
 
 class DaleMaApp extends StatelessWidget {

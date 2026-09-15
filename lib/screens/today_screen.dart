@@ -6,7 +6,6 @@ import '../constants/app_theme.dart';
 import '../models/attendance_record.dart';
 import '../services/attendance_service.dart';
 import '../services/calendar_service.dart';
-import '../services/notification_service.dart';
 import '../widgets/glass_components.dart';
 
 class TodayScreen extends StatefulWidget {
@@ -19,7 +18,6 @@ class TodayScreen extends StatefulWidget {
 class _TodayScreenState extends State<TodayScreen> with WidgetsBindingObserver {
   final AttendanceService _attendanceService = AttendanceService();
   final CalendarService _calendarService = CalendarService();
-  final NotificationService _notificationService = NotificationService.instance;
 
   AttendanceRecord? _todayRecord;
   DayCategory _dayCategory = DayCategory.workday;

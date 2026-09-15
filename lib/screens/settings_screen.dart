@@ -422,20 +422,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       fontSize: 12,
                       onPressed: () async {
                         await _notificationService.sendInstantTestNotification();
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: const Text('已触发强提醒测试，请查看手机横幅与震动！'),
-                              backgroundColor: AppTheme.primaryBlue,
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
-                        }
-                      },
-                    ),
-                    onTap: () async {
-                      await _notificationService.sendInstantTestNotification();
-                      if (mounted) {
+                        if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: const Text('已触发强提醒测试，请查看手机横幅与震动！'),
@@ -443,7 +430,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             behavior: SnackBarBehavior.floating,
                           ),
                         );
-                      }
+                      },
+                    ),
+                    onTap: () async {
+                      await _notificationService.sendInstantTestNotification();
+                      if (!context.mounted) return;
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: const Text('已触发强提醒测试，请查看手机横幅与震动！'),
+                          backgroundColor: AppTheme.primaryBlue,
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
                     },
                   ),
                 ],

@@ -37,8 +37,8 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         transitionDuration: const Duration(milliseconds: 350),
-        pageBuilder: (_, __, ___) => const MainNavigationScreen(),
-        transitionsBuilder: (_, animation, __, child) {
+        pageBuilder: (context, anim, secAnim) => const MainNavigationScreen(),
+        transitionsBuilder: (context, animation, secAnimation, child) {
           return FadeTransition(opacity: animation, child: child);
         },
       ),
@@ -84,7 +84,7 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                   child: Image.asset(
                     'assets/images/splash.png',
                     fit: BoxFit.contain,
-                    errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                    errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
                   ),
                 ),
               ),
