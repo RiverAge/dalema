@@ -1,9 +1,10 @@
 import 'github_release_parser.dart';
 
-/// Parses the static update manifest (update.json) for Android.
+/// Parses the static update manifest (update.json) for Android with ABI split support.
 class UpdateManifestParser {
   ParsedUpdateInfo parseManifest({
     required Map<String, dynamic> manifestJson,
+    String? abi,
   }) {
     final versionName = manifestJson['versionName'] as String?;
     final versionCode = (manifestJson['versionCode'] as num?)?.toInt();
@@ -24,8 +25,19 @@ class UpdateManifestParser {
       throw StateError('Update manifest missing platform=android.');
     }
 
+    // Check if ABI split exists in manifest
+    Map<String, dynamic>? abiPayload;
+    if (abi != null && abi.isNotEmpty) {
+      final abis = platformPayload['abis'];
+      if (abis is Map<String, dynamic> && abis[abi] is Map<String, dynamic>) {
+        abiPayload = abis[abi] as Map<String, dynamic>;
+      }
+    }
+
+    final activePayload = abiPayload ?? platformPayload;
+
     final platformVersionCode =
-        (platformPayload['versionCode'] as num?)?.toInt() ?? versionCode;
+        (activePayload['versionCode'] as num?)?.toInt() ?? versionCode;
     if (platformVersionCode <= 0) {
       throw StateError('Update manifest has invalid platform versionCode.');
     }
@@ -33,20 +45,21 @@ class UpdateManifestParser {
     final downloadUrl = _readDownloadUrl(
       manifestJson: manifestJson,
       platformPayload: platformPayload,
+      abiPayload: abiPayload,
     );
     final fileSize =
-        (platformPayload['fileSize'] as num?)?.toInt() ??
-        (platformPayload['size'] as num?)?.toInt() ??
+        (activePayload['fileSize'] as num?)?.toInt() ??
+        (activePayload['size'] as num?)?.toInt() ??
         0;
     final mirrors = _readMirrors(
-      platformPayload,
+      activePayload,
       fallbackUrl: downloadUrl,
     );
 
     return ParsedUpdateInfo(
       versionName: versionName,
       versionCode: platformVersionCode,
-      sha256: platformPayload['sha256'] as String? ?? '',
+      sha256: activePayload['sha256'] as String? ?? '',
       fileSize: fileSize,
       downloadUrl: downloadUrl,
       changelog: manifestJson['changelog'] as String? ?? '',
@@ -55,10 +68,10 @@ class UpdateManifestParser {
   }
 
   List<String> _readMirrors(
-    Map<String, dynamic> platformPayload, {
+    Map<String, dynamic> payload, {
     required String fallbackUrl,
   }) {
-    final raw = platformPayload['mirrors'];
+    final raw = payload['mirrors'];
     if (raw is List<dynamic>) {
       final list = raw
           .whereType<String>()
@@ -84,15 +97,19 @@ class UpdateManifestParser {
   String _readDownloadUrl({
     required Map<String, dynamic> manifestJson,
     required Map<String, dynamic> platformPayload,
+    Map<String, dynamic>? abiPayload,
   }) {
-    final directUrl = platformPayload['downloadUrl'] as String?;
+    final directUrl = (abiPayload?['downloadUrl'] as String?) ??
+        (platformPayload['downloadUrl'] as String?);
     if (directUrl != null && directUrl.isNotEmpty) {
       return directUrl;
     }
 
     final repository = (manifestJson['repository'] as String?) ?? 'RiverAge/DaleMa';
     final tagName = manifestJson['tagName'] as String?;
-    final assetName = platformPayload['assetName'] as String? ?? 'app-release.apk';
+    final assetName = (abiPayload?['assetName'] as String?) ??
+        (platformPayload['assetName'] as String?) ??
+        'app-release.apk';
     if (tagName == null || tagName.isEmpty) {
       throw StateError('Update manifest missing tagName.');
     }

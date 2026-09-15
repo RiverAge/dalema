@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ffi';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
@@ -32,6 +33,27 @@ class AppUpdateService {
   final GitHubReleaseParser _releaseParser = GitHubReleaseParser();
   final UpdateManifestParser _manifestParser = UpdateManifestParser();
 
+  /// 纯 Dart 零依赖检测本机 CPU 架构（arm64-v8a / armeabi-v7a / x86_64）
+  String? get currentDeviceAbi {
+    if (!Platform.isAndroid) return null;
+    try {
+      switch (Abi.current()) {
+        case Abi.androidArm64:
+          return 'arm64-v8a';
+        case Abi.androidArm:
+          return 'armeabi-v7a';
+        case Abi.androidX64:
+          return 'x86_64';
+        case Abi.androidIA32:
+          return 'x86';
+        default:
+          return null;
+      }
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<void> installDownloadedPackagePath(String filePath) async {
     final result = await OpenFilex.open(
       filePath,
@@ -56,12 +78,13 @@ class AppUpdateService {
   Future<AppUpdateCheckResult> checkForUpdate() async {
     final packageInfo = await PackageInfo.fromPlatform();
     final currentVersionCode = int.tryParse(packageInfo.buildNumber) ?? 0;
+    final abi = currentDeviceAbi;
     ParsedUpdateInfo parsedInfo;
     try {
-      parsedInfo = await _fetchManifestUpdateInfo();
+      parsedInfo = await _fetchManifestUpdateInfo(abi: abi);
     } catch (manifestError) {
       try {
-        parsedInfo = await _fetchGitHubReleaseUpdateInfo();
+        parsedInfo = await _fetchGitHubReleaseUpdateInfo(abi: abi);
       } catch (apiError) {
         throw StateError(
           'Update check failed. '
@@ -95,7 +118,7 @@ class AppUpdateService {
     );
   }
 
-  Future<ParsedUpdateInfo> _fetchManifestUpdateInfo() async {
+  Future<ParsedUpdateInfo> _fetchManifestUpdateInfo({String? abi}) async {
     final payload = await _getJsonMap(
       manifestUrl,
       headers: const <String, String>{
@@ -103,10 +126,10 @@ class AppUpdateService {
         'Accept': 'application/json, */*',
       },
     );
-    return _manifestParser.parseManifest(manifestJson: payload);
+    return _manifestParser.parseManifest(manifestJson: payload, abi: abi);
   }
 
-  Future<ParsedUpdateInfo> _fetchGitHubReleaseUpdateInfo() async {
+  Future<ParsedUpdateInfo> _fetchGitHubReleaseUpdateInfo({String? abi}) async {
     final payload = await _getJsonMap(
       checkUrl,
       headers: const <String, String>{
@@ -114,7 +137,7 @@ class AppUpdateService {
         'Accept': 'application/vnd.github.v3+json',
       },
     );
-    return _releaseParser.parseRelease(releaseJson: payload);
+    return _releaseParser.parseRelease(releaseJson: payload, abi: abi);
   }
 
   Future<Map<String, dynamic>> _getJsonMap(
@@ -178,7 +201,9 @@ class AppUpdateService {
       return candidate;
     }
 
-    return 'dalema-${update.versionName}+${update.versionCode}.apk';
+    final abi = currentDeviceAbi;
+    final suffix = (abi != null && abi.isNotEmpty) ? '-$abi' : '';
+    return 'dalema-${update.versionName}+${update.versionCode}$suffix.apk';
   }
 
   String _summarizeUpdateCheckError(dynamic error) {

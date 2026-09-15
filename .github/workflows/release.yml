@@ -60,10 +60,13 @@ jobs:
             echo "No keystore secret found, building with standard signing configuration."
           fi
 
-      - name: Build release APK
+      - name: Build release APKs (Split per ABI & Universal)
         shell: bash
         run: |
           set -euo pipefail
+          # 1. 构建各架构独立小包（arm64-v8a / armeabi-v7a / x86_64）
+          flutter build apk --release --split-per-abi
+          # 2. 构建 universal 全架构通用兜底大包
           flutter build apk --release
 
       - name: Collect release files & Generate metadata
@@ -74,7 +77,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release-files
-          cp build/app/outputs/flutter-apk/app-release.apk release-files/
+          cp build/app/outputs/flutter-apk/*.apk release-files/
 
           app_version="$(awk '/^version:/{print $2; exit}' pubspec.yaml | tr -d '\r')"
           version_name="${app_version%%+*}"
@@ -83,51 +86,80 @@ jobs:
             version_code="${app_version#*+}"
           fi
 
-          apk_path="release-files/app-release.apk"
-          sha256="$(sha256sum "$apk_path" | awk '{print $1}')"
-          file_size="$(stat -c%s "$apk_path")"
-          repository="${REPO_NAME}"
-          tag_name="${TAG_NAME:-v$version_name}"
-
           export APP_VERSION_NAME="$version_name"
           export APP_VERSION_CODE="$version_code"
-          export APK_SHA256="$sha256"
-          export APK_SIZE="$file_size"
 
-          # Generate release-body.md with DALEMA_UPDATE_METADATA
-          cat > release-body.md <<EOF
-          <!-- DALEMA_UPDATE_METADATA
-          versionName=${version_name}
-          versionCode=${version_code}
-          asset.android.apk=app-release.apk
-          sha256.android.apk=${sha256}
-          size.android.apk=${file_size}
-          DALEMA_UPDATE_METADATA -->
-
-          ## 打卡了吗 v${version_name} 更新说明
-
-          EOF
-
-          # Generate update.json with fast proxy mirrors
           python3 - <<'PY'
           import os
           import json
+          import hashlib
+          from pathlib import Path
 
           repository = os.environ["REPO_NAME"]
-          tag_name = os.environ["TAG_NAME"]
+          tag_name = os.environ.get("TAG_NAME") or ("v" + os.environ["APP_VERSION_NAME"])
           version_name = os.environ["APP_VERSION_NAME"]
           version_code = int(os.environ["APP_VERSION_CODE"])
-          sha256 = os.environ["APK_SHA256"]
-          file_size = int(os.environ["APK_SIZE"])
 
-          github_url = f"https://github.com/{repository}/releases/download/{tag_name}/app-release.apk"
-          mirrors = [
-              f"https://ghfast.top/{github_url}",
-              f"https://ghproxy.net/{github_url}",
-              f"https://gh-proxy.com/{github_url}",
-              github_url,
+          apk_dir = Path("release-files")
+
+          def get_file_info(file_path):
+              if not file_path.exists():
+                  return None, 0
+              sha = hashlib.sha256(file_path.read_bytes()).hexdigest()
+              size = file_path.stat().st_size
+              return sha, size
+
+          def build_mirrors(url):
+              return [
+                  f"https://ghfast.top/{url}",
+                  f"https://ghproxy.net/{url}",
+                  f"https://gh-proxy.com/{url}",
+                  url,
+              ]
+
+          # ABI APKs
+          abi_map = {
+              "arm64-v8a": "app-arm64-v8a-release.apk",
+              "armeabi-v7a": "app-armeabi-v7a-release.apk",
+              "x86_64": "app-x86_64-release.apk",
+          }
+          universal_file = "app-release.apk"
+
+          universal_sha, universal_size = get_file_info(apk_dir / universal_file)
+          universal_url = f"https://github.com/{repository}/releases/download/{tag_name}/{universal_file}"
+
+          abis_payload = {}
+          metadata_lines = [
+              "<!-- DALEMA_UPDATE_METADATA",
+              f"versionName={version_name}",
+              f"versionCode={version_code}",
+              f"asset.android.apk={universal_file}",
+              f"sha256.android.apk={universal_sha}",
+              f"size.android.apk={universal_size}",
           ]
 
+          for abi, filename in abi_map.items():
+              sha, size = get_file_info(apk_dir / filename)
+              if sha:
+                  url = f"https://github.com/{repository}/releases/download/{tag_name}/{filename}"
+                  abis_payload[abi] = {
+                      "assetName": filename,
+                      "downloadUrl": url,
+                      "sha256": sha,
+                      "fileSize": size,
+                      "mirrors": build_mirrors(url),
+                  }
+                  metadata_lines.append(f"asset.android.apk.{abi}={filename}")
+                  metadata_lines.append(f"sha256.android.apk.{abi}={sha}")
+                  metadata_lines.append(f"size.android.apk.{abi}={size}")
+
+          metadata_lines.append("DALEMA_UPDATE_METADATA -->")
+
+          # Write release-body.md
+          with open("release-body.md", "w", encoding="utf-8") as f:
+              f.write("\n".join(metadata_lines) + f"\n\n## 打卡了吗 v{version_name} 更新说明\n")
+
+          # Write update.json
           manifest = {
               "schemaVersion": 1,
               "repository": repository,
@@ -139,11 +171,12 @@ jobs:
               "platforms": {
                   "android": {
                       "packageType": "apk",
-                      "assetName": "app-release.apk",
-                      "downloadUrl": github_url,
-                      "sha256": sha256,
-                      "fileSize": file_size,
-                      "mirrors": mirrors
+                      "assetName": universal_file,
+                      "downloadUrl": universal_url,
+                      "sha256": universal_sha,
+                      "fileSize": universal_size,
+                      "mirrors": build_mirrors(universal_url),
+                      "abis": abis_payload
                   }
               }
           }

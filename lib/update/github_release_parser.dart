@@ -4,6 +4,7 @@ part 'parts/release_metadata_parsing.dart';
 class GitHubReleaseParser {
   ParsedUpdateInfo parseRelease({
     required Map<String, dynamic> releaseJson,
+    String? abi,
   }) {
     final tagName = releaseJson['tag_name'] as String?;
     if (tagName == null || tagName.isEmpty) {
@@ -21,6 +22,7 @@ class GitHubReleaseParser {
     final assetInfo = _selectAndroidAsset(
       assets: assets,
       metadata: metadata,
+      abi: abi,
     );
 
     final versionName =
@@ -47,36 +49,60 @@ class GitHubReleaseParser {
   SelectedAssetInfo _selectAndroidAsset({
     required List<dynamic> assets,
     required ReleaseMetadata metadata,
+    String? abi,
   }) {
-    final platformAssetInfo = metadata.platformAssets['android.apk'] ??
-        metadata.platformAssets['android'];
-    final expectedAssetName =
-        platformAssetInfo?.assetName ?? 'app-release.apk';
+    // 1. If ABI is specified (e.g. arm64-v8a), check ABI specific asset first
+    if (abi != null && abi.isNotEmpty) {
+      final abiKey = 'android.apk.$abi';
+      final abiAssetInfo = metadata.platformAssets[abiKey];
+      final expectedAbiAssetName = abiAssetInfo?.assetName ?? 'app-$abi-release.apk';
 
-    // 1. Exact match
-    for (final asset in assets) {
-      final assetMap = asset as Map<String, dynamic>;
-      final name = assetMap['name'] as String?;
-      if (name == expectedAssetName) {
-        final downloadUrl = assetMap['browser_download_url'] as String?;
-        final assetSize = (assetMap['size'] as num?)?.toInt() ?? 0;
+      for (final asset in assets) {
+        final assetMap = asset as Map<String, dynamic>;
+        final name = assetMap['name'] as String?;
+        if (name == expectedAbiAssetName || name == 'app-$abi-release.apk') {
+          final downloadUrl = assetMap['browser_download_url'] as String?;
+          final assetSize = (assetMap['size'] as num?)?.toInt() ?? 0;
 
-        if (downloadUrl == null || downloadUrl.isEmpty) {
-          throw StateError('Asset "$name" missing browser_download_url.');
+          if (downloadUrl != null && downloadUrl.isNotEmpty) {
+            return SelectedAssetInfo(
+              downloadUrl: downloadUrl,
+              versionCode: abiAssetInfo?.versionCode ?? metadata.versionCode,
+              sha256: abiAssetInfo?.sha256 ?? '',
+              size: (abiAssetInfo?.size ?? 0) > 0 ? abiAssetInfo!.size : assetSize,
+            );
+          }
         }
-
-        return SelectedAssetInfo(
-          downloadUrl: downloadUrl,
-          versionCode: platformAssetInfo?.versionCode,
-          sha256: platformAssetInfo?.sha256 ?? '',
-          size: (platformAssetInfo?.size ?? 0) > 0
-              ? platformAssetInfo!.size
-              : assetSize,
-        );
       }
     }
 
-    // 2. Fuzzy match (any asset ending with .apk)
+    // 2. Universal asset match
+    final universalAssetInfo = metadata.platformAssets['android.apk'] ??
+        metadata.platformAssets['android'];
+    final expectedUniversalName =
+        universalAssetInfo?.assetName ?? 'app-release.apk';
+
+    for (final asset in assets) {
+      final assetMap = asset as Map<String, dynamic>;
+      final name = assetMap['name'] as String?;
+      if (name == expectedUniversalName) {
+        final downloadUrl = assetMap['browser_download_url'] as String?;
+        final assetSize = (assetMap['size'] as num?)?.toInt() ?? 0;
+
+        if (downloadUrl != null && downloadUrl.isNotEmpty) {
+          return SelectedAssetInfo(
+            downloadUrl: downloadUrl,
+            versionCode: universalAssetInfo?.versionCode ?? metadata.versionCode,
+            sha256: universalAssetInfo?.sha256 ?? '',
+            size: (universalAssetInfo?.size ?? 0) > 0
+                ? universalAssetInfo!.size
+                : assetSize,
+          );
+        }
+      }
+    }
+
+    // 3. Fuzzy match (any asset ending with .apk)
     for (final asset in assets) {
       final assetMap = asset as Map<String, dynamic>;
       final name = (assetMap['name'] as String? ?? '').toLowerCase();
@@ -86,8 +112,8 @@ class GitHubReleaseParser {
       if (downloadUrl != null && downloadUrl.isNotEmpty && name.endsWith('.apk')) {
         return SelectedAssetInfo(
           downloadUrl: downloadUrl,
-          versionCode: platformAssetInfo?.versionCode,
-          sha256: platformAssetInfo?.sha256 ?? '',
+          versionCode: universalAssetInfo?.versionCode ?? metadata.versionCode,
+          sha256: universalAssetInfo?.sha256 ?? '',
           size: assetSize,
         );
       }
