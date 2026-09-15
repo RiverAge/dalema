@@ -68,6 +68,9 @@ jobs:
 
       - name: Collect release files & Generate metadata
         shell: bash
+        env:
+          REPO_NAME: ${{ github.repository }}
+          TAG_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           mkdir -p release-files
@@ -83,8 +86,13 @@ jobs:
           apk_path="release-files/app-release.apk"
           sha256="$(sha256sum "$apk_path" | awk '{print $1}')"
           file_size="$(stat -c%s "$apk_path")"
-          repository="${GITHUB_REPOSITORY}"
-          tag_name="${GITHUB_REF_NAME:-v$version_name}"
+          repository="${REPO_NAME}"
+          tag_name="${TAG_NAME:-v$version_name}"
+
+          export APP_VERSION_NAME="$version_name"
+          export APP_VERSION_CODE="$version_code"
+          export APK_SHA256="$sha256"
+          export APK_SIZE="$file_size"
 
           # Generate release-body.md with DALEMA_UPDATE_METADATA
           cat > release-body.md <<EOF
@@ -101,8 +109,16 @@ jobs:
           EOF
 
           # Generate update.json with fast proxy mirrors
-          python3 - <<PY
+          python3 - <<'PY'
+          import os
           import json
+
+          repository = os.environ["REPO_NAME"]
+          tag_name = os.environ["TAG_NAME"]
+          version_name = os.environ["APP_VERSION_NAME"]
+          version_code = int(os.environ["APP_VERSION_CODE"])
+          sha256 = os.environ["APK_SHA256"]
+          file_size = int(os.environ["APK_SIZE"])
 
           github_url = f"https://github.com/{repository}/releases/download/{tag_name}/app-release.apk"
           mirrors = [
@@ -114,19 +130,19 @@ jobs:
 
           manifest = {
               "schemaVersion": 1,
-              "repository": "${repository}",
-              "tagName": "${tag_name}",
+              "repository": repository,
+              "tagName": tag_name,
               "releasePageUrl": f"https://github.com/{repository}/releases/tag/{tag_name}",
-              "versionName": "${version_name}",
-              "versionCode": int("${version_code}"),
-              "changelog": f"打卡了吗 v${version_name} 发布",
+              "versionName": version_name,
+              "versionCode": version_code,
+              "changelog": f"打卡了吗 v{version_name} 发布",
               "platforms": {
                   "android": {
                       "packageType": "apk",
                       "assetName": "app-release.apk",
                       "downloadUrl": github_url,
-                      "sha256": "${sha256}",
-                      "fileSize": int("${file_size}"),
+                      "sha256": sha256,
+                      "fileSize": file_size,
                       "mirrors": mirrors
                   }
               }
