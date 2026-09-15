@@ -111,6 +111,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _handleTestNotification() async {
+    try {
+      final permitted = await _notificationService.checkPermissionStatus();
+      if (!permitted) {
+        final granted = await _notificationService.requestPermissions();
+        if (!granted) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('通知权限未开启，请在系统设置中允许通知权限'),
+              backgroundColor: AppTheme.amberOrange,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          return;
+        }
+      }
+      await _notificationService.sendInstantTestNotification();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('已触发强提醒测试，请查看手机通知栏与震动！'),
+          backgroundColor: AppTheme.primaryBlue,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('发送测试通知失败: $e'),
+          backgroundColor: AppTheme.roseRed,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   Future<void> _syncOnlineHolidays() async {
     setState(() => _isSyncingHolidays = true);
     final currentYear = DateTime.now().year;
@@ -420,29 +458,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       icon: Icons.play_arrow_rounded,
                       primaryColor: AppTheme.primaryBlue,
                       fontSize: 12,
-                      onPressed: () async {
-                        await _notificationService.sendInstantTestNotification();
-                        if (!context.mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: const Text('已触发强提醒测试，请查看手机横幅与震动！'),
-                            backgroundColor: AppTheme.primaryBlue,
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
-                      },
+                      onPressed: () => _handleTestNotification(),
                     ),
-                    onTap: () async {
-                      await _notificationService.sendInstantTestNotification();
-                      if (!context.mounted) return;
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: const Text('已触发强提醒测试，请查看手机横幅与震动！'),
-                          backgroundColor: AppTheme.primaryBlue,
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    },
+                    onTap: () => _handleTestNotification(),
                   ),
                 ],
               ),

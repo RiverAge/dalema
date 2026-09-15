@@ -59,7 +59,7 @@ class NotificationService {
     }
 
     const AndroidInitializationSettings androidSettings =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+        AndroidInitializationSettings('@mipmap/launcher_icon');
 
     const DarwinInitializationSettings iosSettings = DarwinInitializationSettings(
       requestAlertPermission: false,
@@ -272,7 +272,6 @@ class NotificationService {
         enableVibration: settings.vibrationEnabled,
         vibrationPattern: settings.vibrationEnabled ? pattern : null,
         audioAttributesUsage: AudioAttributesUsage.alarm,
-        icon: '@mipmap/ic_launcher',
         category: AndroidNotificationCategory.alarm,
         fullScreenIntent: true,
         actions: const [
@@ -345,7 +344,6 @@ class NotificationService {
         enableVibration: settings.vibrationEnabled,
         vibrationPattern: settings.vibrationEnabled ? pattern : null,
         audioAttributesUsage: AudioAttributesUsage.alarm,
-        icon: '@mipmap/ic_launcher',
         category: AndroidNotificationCategory.alarm,
         fullScreenIntent: true,
         actions: const [
@@ -417,7 +415,6 @@ class NotificationService {
       enableVibration: true,
       vibrationPattern: pattern,
       audioAttributesUsage: AudioAttributesUsage.alarm,
-      icon: '@mipmap/ic_launcher',
       category: AndroidNotificationCategory.alarm,
       fullScreenIntent: true,
       actions: const [
